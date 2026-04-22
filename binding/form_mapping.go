@@ -196,6 +196,23 @@ func trySetCustom(val string, value reflect.Value) (isSet bool, err error) {
 	return false, nil
 }
 
+// trySetCustomAll tries to set a custom slice or array type by calling UnmarshalParam
+// for each value in vs. This supports slice types (e.g. EnumSlice[T]) that accumulate
+// values via append inside UnmarshalParam, enabling repeated query params like
+// ?type=course&type=bundle to be correctly bound as a multi-value slice.
+func trySetCustomAll(vs []string, value reflect.Value) (isSet bool, err error) {
+	switch v := value.Addr().Interface().(type) {
+	case BindUnmarshaler:
+		for _, val := range vs {
+			if err = v.UnmarshalParam(val); err != nil {
+				return true, err
+			}
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 // trySetUsingParser tries to set a custom type value based on the presence of the "parser" tag on the field.
 // If the parser tag does not exist or does not match any of the supported parsers, gin will skip over this.
 func trySetUsingParser(val string, value reflect.Value, parser string) (isSet bool, err error) {
@@ -265,7 +282,7 @@ func setByForm(value reflect.Value, field reflect.StructField, form map[string][
 
 		if ok, err = trySetUsingParser(vs[0], value, opt.parser); ok {
 			return ok, err
-		} else if ok, err = trySetCustom(vs[0], value); ok {
+		} else if ok, err = trySetCustomAll(vs, value); ok {
 			return ok, err
 		}
 
@@ -290,7 +307,7 @@ func setByForm(value reflect.Value, field reflect.StructField, form map[string][
 
 		if ok, err = trySetUsingParser(vs[0], value, opt.parser); ok {
 			return ok, err
-		} else if ok, err = trySetCustom(vs[0], value); ok {
+		} else if ok, err = trySetCustomAll(vs, value); ok {
 			return ok, err
 		}
 

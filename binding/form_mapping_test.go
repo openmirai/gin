@@ -662,6 +662,65 @@ func TestMappingCustomSliceOfSliceForm(t *testing.T) {
 	assert.Equal(t, []customPath{{"bar", "foo"}, {"bar", "foo", "spam"}}, s.FileData)
 }
 
+// accumulatingSlice is a slice type that accumulates values via append in UnmarshalParam.
+// This is the same pattern used by EnumSlice[T] in real projects — repeated query params
+// like ?type=course&type=bundle should result in ["course", "bundle"].
+type accumulatingSlice []string
+
+func (e *accumulatingSlice) UnmarshalParam(param string) error {
+	param = strings.TrimSpace(param)
+	if param == "" {
+		return nil
+	}
+	*e = append(*e, param)
+	return nil
+}
+
+func TestMappingAccumulatingSliceFormSingleValue(t *testing.T) {
+	var s struct {
+		Types accumulatingSlice `form:"type"`
+	}
+	err := mappingByPtr(&s, formSource{"type": {"course"}}, "form")
+	require.NoError(t, err)
+	assert.Equal(t, accumulatingSlice{"course"}, s.Types)
+}
+
+func TestMappingAccumulatingSliceFormRepeatedValues(t *testing.T) {
+	var s struct {
+		Types accumulatingSlice `form:"type"`
+	}
+	err := mappingByPtr(&s, formSource{"type": {"course", "bundle", "product"}}, "form")
+	require.NoError(t, err)
+	assert.Equal(t, accumulatingSlice{"course", "bundle", "product"}, s.Types)
+}
+
+func TestMappingAccumulatingSliceFormRepeatedValuesIgnoresEmpty(t *testing.T) {
+	var s struct {
+		Types accumulatingSlice `form:"type"`
+	}
+	err := mappingByPtr(&s, formSource{"type": {"course", "", "bundle"}}, "form")
+	require.NoError(t, err)
+	assert.Equal(t, accumulatingSlice{"course", "bundle"}, s.Types)
+}
+
+func TestMappingAccumulatingSliceURIRepeatedValues(t *testing.T) {
+	var s struct {
+		Types accumulatingSlice `uri:"type"`
+	}
+	err := mappingByPtr(&s, formSource{"type": {"course", "bundle"}}, "uri")
+	require.NoError(t, err)
+	assert.Equal(t, accumulatingSlice{"course", "bundle"}, s.Types)
+}
+
+func TestMappingAccumulatingSliceFormEmpty(t *testing.T) {
+	var s struct {
+		Types accumulatingSlice `form:"type"`
+	}
+	err := mappingByPtr(&s, formSource{"type": {""}}, "form")
+	require.NoError(t, err)
+	assert.Empty(t, s.Types)
+}
+
 type objectID [12]byte
 
 func (o *objectID) UnmarshalParam(param string) error {
